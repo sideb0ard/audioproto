@@ -47,7 +47,7 @@ int subsystem_audio::stream_capture_callback(const void *inputBuffer,
 							PaStreamCallbackFlags statusFlags,
 							void *userData)
 {
-	paData *data = (paData*)userData;
+    paData *data = (paData*)userData;
     const SAMPLE *rptr = (const SAMPLE*)inputBuffer;
     SAMPLE *wptr = &data->recordedSamples[data->frameIndex * NUM_CHANNELS];
     long framesToCalc;
