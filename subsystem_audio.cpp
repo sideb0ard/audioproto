@@ -44,6 +44,7 @@ void subsystem_audio::audio_init() {
     }
 }
 
+
 int subsystem_audio::stream_capture_callback(const void *inputBuffer,
 						    void *outputBuffer,
 							unsigned long framesPerBuffer,
@@ -53,32 +54,28 @@ int subsystem_audio::stream_capture_callback(const void *inputBuffer,
 {
     paData *data = (paData*)userData;
     const SAMPLE *rptr = (const SAMPLE*)inputBuffer;
-    long framesToCalc;
-    long i;
-    int finished;
-    unsigned long framesLeft = data->maxFrameIndex - data->frameIndex;
+    unsigned long i;
 
     (void) outputBuffer;
     (void) timeInfo;
     (void) statusFlags;
 
-    if ( framesLeft < framesPerBuffer ) {
-        framesToCalc = framesLeft;
-        finished = paComplete;
-    } else {
-        framesToCalc = framesPerBuffer;
-        finished = paContinue;
-    }
-    cout << "CB CALLED - " << framesToCalc << " still to be done\n";
-
+    //cout << "SAMPINDEX " << data->frameIndex << " at START OF CB\n";
     int samp_index = data->frameIndex;
-    for ( i = 0; i < framesToCalc; i++ ) {
+    for ( i = 0; i < framesPerBuffer; i++ ) {
         data->recordedSamples[samp_index++] = *rptr++;
+        //cout << "SAMP_INDEX: " << samp_index << '\n';
         if  (NUM_CHANNELS == 2) data->recordedSamples[samp_index++] = *rptr++; 
+        if ( samp_index >= data->maxFrameIndex ) {
+            cout << "SAMP_INDEX " << samp_index << " greater than " << data->maxFrameIndex << " - resettting to zero\n";
+            samp_index = 0;
+        }
     }
-    data->frameIndex += framesToCalc;
-    return finished;
+    data->frameIndex = samp_index;
+    //cout << "RETURNL " << data->frameIndex << " " << samp_index << '\n';
+    return paContinue;
 }
+
 
 void subsystem_audio::start_audio_capture() {
 
@@ -87,10 +84,10 @@ void subsystem_audio::start_audio_capture() {
     PaError             err = paNoError;
 
     paData data{.frameIndex = 0, 
-                .maxFrameIndex = BUFFER_LENGTH_IN_SECONDS * SAMPLE_RATE,
+                .maxFrameIndex = BUFFER_SIZE_IN_FRAMES,
                 .recordedSamples = m_circ_buffer};
 
-    cout << "Starting audio capture\n";
+    cout << "Starting audio capture - max frame size: " << BUFFER_SIZE_IN_FRAMES << '\n' ;
 
     inputParameters.device = 4;
     if (inputParameters.device == paNoDevice) goto error;
@@ -127,16 +124,10 @@ void subsystem_audio::start_audio_capture() {
 error:
     Pa_Terminate();
 
-    //for ( const auto v : data.recordedSamples ) {
-    //    cout << "DVal " << v << "\n";
+    //if ( std::FILE* f = std::fopen("audiotest.raw", "wb")) {
+    //    std::fwrite(m_circ_buffer.data(), sizeof m_circ_buffer[0], m_circ_buffer.size(), f);
+    //    std::fclose(f);
     //}
-    //for ( const auto v : m_circ_buffer) {
-    //    cout << "MVal " << v << "\n";
-    //}
-    if ( std::FILE* f = std::fopen("audiotest.raw", "wb")) {
-        std::fwrite(m_circ_buffer.data(), sizeof m_circ_buffer[0], m_circ_buffer.size(), f);
-        std::fclose(f);
-    }
 
     cerr << "Errblah: " << Pa_GetErrorText(err) << endl;
     exit(err);
