@@ -22,7 +22,7 @@ public:
 
 private:
     thread m_executor;
-    array<int, BUFFER_LENGTH_IN_SECONDS * NUM_CHANNELS * SAMPLE_RATE> m_circ_buffer;
+    array<SAMPLE, BUFFER_SIZE_IN_SAMPLES> m_circ_buffer;
 private:
     void run();
     void audio_init();

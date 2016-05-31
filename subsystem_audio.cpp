@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cstdio>
 #include <thread>
 #include <chrono>
 
@@ -11,7 +12,10 @@
 using std::cout;
 using std::cerr;
 using std::endl;
+using std::ofstream;
+using std::ios;
 using std::thread;
+using std::array;
 
 std::chrono::milliseconds sleeptime(1000);
 
@@ -49,7 +53,6 @@ int subsystem_audio::stream_capture_callback(const void *inputBuffer,
 {
     paData *data = (paData*)userData;
     const SAMPLE *rptr = (const SAMPLE*)inputBuffer;
-    SAMPLE *wptr = &data->recordedSamples[data->frameIndex * NUM_CHANNELS];
     long framesToCalc;
     long i;
     int finished;
@@ -66,10 +69,12 @@ int subsystem_audio::stream_capture_callback(const void *inputBuffer,
         framesToCalc = framesPerBuffer;
         finished = paContinue;
     }
+    cout << "CB CALLED - " << framesToCalc << " still to be done\n";
 
+    int samp_index = data->frameIndex;
     for ( i = 0; i < framesToCalc; i++ ) {
-        *wptr++ = *rptr++; // left channel
-        if  (NUM_CHANNELS == 2) *wptr++ = *rptr++; 
+        data->recordedSamples[samp_index++] = *rptr++;
+        if  (NUM_CHANNELS == 2) data->recordedSamples[samp_index++] = *rptr++; 
     }
     data->frameIndex += framesToCalc;
     return finished;
@@ -80,21 +85,12 @@ void subsystem_audio::start_audio_capture() {
     PaStreamParameters  inputParameters;
     PaStream            *stream;
     PaError             err = paNoError;
-    paData              data;
-    int                 i;
-    int                 totalFrames;
-    int                 numSamples;
-    int                 numBytes;
-    SAMPLE              max, val;
-    double              average;
+
+    paData data{.frameIndex = 0, 
+                .maxFrameIndex = BUFFER_LENGTH_IN_SECONDS * SAMPLE_RATE,
+                .recordedSamples = m_circ_buffer};
 
     cout << "Starting audio capture\n";
-
-    data.maxFrameIndex = totalFrames = NUM_SECONDS * SAMPLE_RATE;
-    data.frameIndex = 0;
-    numSamples = totalFrames * NUM_CHANNELS;
-    numBytes = numSamples * sizeof(SAMPLE);
-    data.recordedSamples = (SAMPLE*) calloc(numBytes, 1);
 
     inputParameters.device = 4;
     if (inputParameters.device == paNoDevice) goto error;
@@ -125,24 +121,23 @@ void subsystem_audio::start_audio_capture() {
     err = Pa_CloseStream(stream);
     if ( err != paNoError) goto error;
 
-    max = 0;
-    average = 0.0;
-    for ( i = 0; i < numSamples; i++ ) {
-        val = data.recordedSamples[i];
-        if ( val < 0 ) val = -val; // ABS
-        if ( val > max) max = val;
-        average += val;
-    }
-    average = average / (double)numSamples;
-    cout << "Sample max amp = " << max << endl;
-    cout << "Sample average amp = " << average << endl;
-
-
     Pa_Terminate();
     cout << "Finished recording test\n";
 
 error:
     Pa_Terminate();
+
+    //for ( const auto v : data.recordedSamples ) {
+    //    cout << "DVal " << v << "\n";
+    //}
+    //for ( const auto v : m_circ_buffer) {
+    //    cout << "MVal " << v << "\n";
+    //}
+    if ( std::FILE* f = std::fopen("audiotest.raw", "wb")) {
+        std::fwrite(m_circ_buffer.data(), sizeof m_circ_buffer[0], m_circ_buffer.size(), f);
+        std::fclose(f);
+    }
+
     cerr << "Errblah: " << Pa_GetErrorText(err) << endl;
     exit(err);
 }
